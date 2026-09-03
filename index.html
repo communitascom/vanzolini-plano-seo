@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel Vanzolini</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --ink:#0E1A2B; --body:#33455C; --muted:#6B7A90;
+  --line:#DEE5EF; --surface:#FFFFFF; --ground:#F4F7FB;
+  --accent:#0B5FB0; --accent-soft:#E7F0FB;
+  --bad:#B3401F; --bad-soft:#FBEAE2;
+  --f-disp:"Work Sans",-apple-system,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+     background:var(--ground);font-family:var(--f-disp);color:var(--body)}
+.gbox{width:100%;max-width:340px;padding:32px 28px;background:var(--surface);border:1px solid var(--line);
+      border-radius:14px;box-shadow:0 1px 2px rgba(14,26,43,.04),0 12px 32px -14px rgba(14,26,43,.2);
+      text-align:center}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:19px;font-weight:700;color:var(--ink);margin:6px 0 4px;letter-spacing:-.2px}
+.gbox p{font-size:12.5px;color:var(--muted);margin:0 0 20px}
+form{display:flex;flex-direction:column;gap:10px}
+input{font-family:var(--f-disp);font-size:16px;letter-spacing:.3em;text-align:center;padding:12px;
+      border:1.5px solid var(--line);border-radius:9px;background:var(--ground);color:var(--ink)}
+input:focus{outline:none;border-color:var(--accent);background:var(--surface)}
+button{font-family:var(--f-disp);font-size:13.5px;font-weight:650;padding:11px;border:none;border-radius:9px;
+       background:var(--ink);color:#fff;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+button:hover:not(:disabled){background:var(--accent)}
+#gerr{min-height:16px;margin-top:12px;font-size:12px;color:var(--bad)}
+#gerr.busy{color:var(--muted)}
+</style></head>
+<body>
+<div class="gbox">
+  <div class="eyebrow">Fundação Vanzolini</div>
+  <h1>Painel de execução</h1>
+  <p>Pauta sugerida de SEO/AEO/GEO — acesso restrito</p>
+  <form id="gform" autocomplete="off">
+    <input id="gpin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="PIN de acesso" aria-label="PIN de acesso">
+    <button type="submit" id="gbtn">Entrar</button>
+  </form>
+  <div id="gerr"></div>
+</div>
+<script>
+(function(){
+  var ITER = 310000;
+  var err = document.getElementById('gerr'), btn = document.getElementById('gbtn'), inp = document.getElementById('gpin');
+  function say(m, busy){ err.textContent = m || ''; err.className = busy ? 'busy' : ''; }
+  async function unlock(pin){
+    btn.disabled = true; say('Abrindo o painel...', true);
+    try{
+      var raw = await (await fetch('painel.enc', {cache:'no-store'})).arrayBuffer();
+      var buf = new Uint8Array(raw);
+      var salt = buf.slice(0,16), iv = buf.slice(16,28), ct = buf.slice(28);
+      var km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveKey']);
+      var key = await crypto.subtle.deriveKey({name:'PBKDF2', salt:salt, iterations:ITER, hash:'SHA-256'}, km, {name:'AES-GCM', length:256}, false, ['decrypt']);
+      var plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:iv}, key, ct);
+      var html = new TextDecoder().decode(plain);
+      try{ sessionStorage.setItem('vzp_pin', pin); }catch(e){}
+      document.open(); document.write(html); document.close();
+    }catch(e){
+      try{ sessionStorage.removeItem('vzp_pin'); }catch(_){}
+      say('PIN incorreto.'); btn.disabled = false; inp.value=''; inp.focus();
+    }
+  }
+  document.getElementById('gform').addEventListener('submit', function(ev){
+    ev.preventDefault();
+    var v = inp.value.trim();
+    if (v) unlock(v);
+  });
+  var saved = null;
+  try{ saved = sessionStorage.getItem('vzp_pin'); }catch(e){}
+  if (saved) unlock(saved); else inp.focus();
+})();
+</script>
+</body></html>
